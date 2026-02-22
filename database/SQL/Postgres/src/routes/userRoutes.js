@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { listUsers, addUser } = require('../controllers/userController');
+const { addUser, listUsers, addUserWithFail } = require('../controllers/userController');
 
 router.get('/', listUsers);
-router.post('/add', addUser);
+router.post('/', addUser);
+router.post('/test-transaction', addUserWithFail);
 
 module.exports = router;

@@ -1,41 +1,14 @@
 const pool = require('../db');
+const { loadSql } = require('../../sql-query/sqlLoader');
 
-// Получить всех пользователей с их постами (JOIN)
-async function listUsers(req, res) {
-  try {
-    const result = await pool.query(`
-      SELECT u.id as user_id, u.name, u.email, p.id as post_id, p.title, p.content
-      FROM users u
-      LEFT JOIN posts p ON u.id = p.user_id
-      ORDER BY u.id, p.id
-    `);
+const insertUserSql = loadSql('users/insertUser.sql');
+const selectUsersSql = loadSql('users/selectUsers.sql');
 
-    // Преобразуем результат в объект с массивом постов
-    const usersMap = {};
-    result.rows.forEach(row => {
-      if (!usersMap[row.user_id]) {
-        usersMap[row.user_id] = { id: row.user_id, name: row.name, email: row.email, posts: [] };
-      }
-      if (row.post_id) {
-        usersMap[row.user_id].posts.push({ id: row.post_id, title: row.title, content: row.content });
-      }
-    });
-
-    res.json(Object.values(usersMap));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-}
-
-// Добавить пользователя
 async function addUser(req, res) {
+  const { name, email } = req.body;
+
   try {
-    const { name, email } = req.body;
-    const result = await pool.query(
-      'INSERT INTO users(name, email) VALUES($1, $2) RETURNING *',
-      [name, email]
-    );
+    const result = await pool.query(insertUserSql, [name, email]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -43,4 +16,39 @@ async function addUser(req, res) {
   }
 }
 
-module.exports = { listUsers, addUser };
+async function listUsers(req, res) {
+  try {
+    const result = await pool.query(selectUsersSql);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+async function addUserWithFail(req, res) {
+  const { name, email } = req.body;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(insertUserSql, [name, email]);
+
+    // специальная ошибка
+    await client.query('INSERT INTO not_existing_table VALUES (1)');
+
+    await client.query('COMMIT');
+
+    res.status(201).json(result.rows[0]);
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Transaction failed:', err.message);
+    res.status(500).json({ error: 'Transaction rolled back' });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { addUser, listUsers, addUserWithFail };
