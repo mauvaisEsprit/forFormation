@@ -1,24 +1,19 @@
 const pool = require("../db");
 const { loadSql } = require("../../sql-query/sqlLoader");
+const userService = require("../services/user.service")
 
 const insertUserSql = loadSql("users/insertUser.sql");
 const selectUsersSql = loadSql("users/selectUsers.sql");
 const updateUserSql = loadSql("users/updateUser.sql");
 
-async function addUser(req, res) {
-  const { name, email } = req.body;
-  const client = await pool.connect();
+// controllers/user.controller.js
+async function createUserController(req, res, next) {
+  console.log("Controller")
   try {
-    await client.query("BEGIN");
-    const result = await client.query(insertUserSql, [name, email]);
-    await client.query("COMMIT");
-    res.status(201).json(result.rows[0]);
+    const user = await userService.createUser(req.body);
+    res.status(201).json(user);
   } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("Transaction failed:", err.message);
-    res.status(500).json({ error: "Transaction rolled back" });
-  } finally {
-    client.release();
+    next(err); // централизованный error middleware
   }
 }
 
@@ -88,4 +83,4 @@ async function updateUser(req, res) {
   }
 }
 
-module.exports = { addUser, listUsers, addUserWithFail, updateUser };
+module.exports = { createUserController, listUsers, addUserWithFail, updateUser };
